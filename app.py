@@ -1,68 +1,54 @@
+from prefect import flow, task
 from db import init_db, SessionLocal
 from models import Customer, Account
 from sqlalchemy.exc import SQLAlchemyError
 import csv
-from datetime import datetime
 
-# def main():
-#     init_db()
-#     db = SessionLocal()
-#
-#     print(datetime.strptime("2025-06-07 21:00:00", "%y-%m-%d %H:%M:%S").date())
-#
-#     try:
-#         with db.begin():
-#             with open('customers.csv', newline='') as csvfile:
-#                 reader = csv.DictReader(csvfile)
-#                 for index, row in enumerate(reader):
-#                     customer = Customer(name=row["name"], ssn=row["ssn"], email=row["email"])
-#                     db.add(customer)
-#
-#     except SQLAlchemyError as e:
-#         db.rollback()
-#         print("[ERROR] Något gick fel:", e)
-#
-#     # try:
-#     #     with db.begin():
-#     #        customer = Customer(name="Benjamin", ssn="7001092456", email="benjamin@example.com")
-#     #         db.add(customer)
-#     #
-#     #         account = Account(number="8064047892", balance=200, customer_id=customer.id)
-#     #         db.add(account)
-#     #
-#     # except SQLAlchemyError as e:
-#     #     db.rollback()
-#     #     print("[ERROR] Något gick fel:", e)
-#     #
-#     # print(f"{customer.name} ({customer.email}) har saldo {account.balance}")
-#
-#     db.close()
-#
-# if __name__ == "__main__":
-#     main()
-
-from prefect import flow, task
-import random
+@task
+def read_csv(filname):
+    with open(filname, newline="", encoding="utf-8") as csvfile:
+        reader = csv.DictReader(csvfile)
+        return [row for row in reader]
 
 
 @task
-def get_customer_ids() -> list[str]:
-    # Fetch customer IDs from a database or API
-    return [f"customer{n}" for n in random.choices(range(100), k=10)]
-
+def create_customers(data):
+    db = SessionLocal()
+    try:
+        with db.begin():
+            for row in data:
+                customer = Customer(name=row['name'], ssn=row['ssn'], email=row['email'])
+                db.add(customer)
+    except SQLAlchemyError as e:
+        db.rollback()
+        print("[ERROR] Import misslyckades och har rullats tillbaka:", e)
+    finally:
+        db.close()
 
 @task
-def process_customer(customer_id: str) -> str:
-    # Process a single customer
-    return f"Processed {customer_id}"
+def create_account_and_customer():
+    db = SessionLocal()
+    try:
+        with db.begin():
+            customer = Customer(name="Benjamin", ssn="7001090000", email="benjamin@example.com")
+            db.add(customer)
+
+            account = Account(number="8064047892", balance=200, customer_id=customer.id)
+            db.add(account)
+
+    except SQLAlchemyError as e:
+        db.rollback()
+        print("[ERROR] Något gick fel:", e)
+    finally:
+        db.close()
 
 
 @flow
-def main() -> list[str]:
-    customer_ids = get_customer_ids()
-    # Map the process_customer task across all customer IDs
-    results = process_customer.map(customer_ids)
-    return results
+def main():
+    init_db()
+    create_account_and_customer()
+    data = read_csv("customers.csv")
+    create_customers(data)
 
 
 if __name__ == "__main__":
