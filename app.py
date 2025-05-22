@@ -44,7 +44,7 @@ def create_account_and_customer():
 
 
 @flow
-def main():
+def main() -> list[str]:
     init_db()
     create_account_and_customer()
     data = read_csv("customers.csv")
